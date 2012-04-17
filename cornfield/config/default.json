@@ -17,7 +17,7 @@
   },
   "environment": {
     "mode": "development",
-    "defaultUser": "secretrobotron@gmail.com"
+    "defaultUser": "florent@lesmecaniques.net"
   },
   "templates": {
     "default-butter-test": {
