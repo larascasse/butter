@@ -4,6 +4,7 @@ const express = require('express'),
       fs = require('fs'),
       path = require('path'),
       app = express.createServer(),
+      stylus = require('stylus'),
       CONFIG = require('config'),
       TEMPLATES_DIR =  CONFIG.dirs.templates,
       PUBLISH_DIR = CONFIG.dirs.publish,
@@ -24,7 +25,12 @@ console.log( "Templates Dir:", TEMPLATES_DIR );
 console.log( "Publish Dir:", PUBLISH_DIR );
 
 var mongoose = require('mongoose'),
-    db = mongoose.connect('mongodb://localhost/test'),
+    db = mongoose.connect('mongodb://localhost/test', function( err ) {
+        if ( err ) {
+          console.log( "COULD NOT CONNECT TO MONGODB! Make sure it is running!" );
+          throw err;
+        }
+    });
     Schema = mongoose.Schema,
     
     Project = new Schema({
@@ -49,6 +55,9 @@ app.use(express.logger(CONFIG.logger))
   .use(express.bodyParser())
   .use(express.cookieParser())
   .use(express.session(CONFIG.session))
+  .use(stylus.middleware({
+    src: WWW_ROOT
+  }))
   .use(express.static( WWW_ROOT ))
   .use(express.static( PUBLISH_DIR ))
   .use(express.directory( WWW_ROOT, { icons: true } ) );
@@ -254,6 +263,6 @@ app.post('/project/:id?', function( req, res ) {
 
 app.listen(CONFIG.server.bindPort, CONFIG.server.bindIP, function() {
   var addy = app.address();
-  console.log('Server started on http://' + addy.address + ':' + addy.port);
+  console.log('Server started on http://' + CONFIG.server.bindIP + ':' + CONFIG.server.bindPort);
   console.log('Press Ctrl+C to stop');
 });

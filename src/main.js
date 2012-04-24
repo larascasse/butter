@@ -13,7 +13,10 @@
             "./core/target",
             "./core/media",
             "./core/page",
-            "./modules"
+            "./modules",
+            "./dependencies",
+            "ui/ui",
+            "util/xhr"
           ],
           function(
             Logger,
@@ -21,7 +24,10 @@
             Target,
             Media,
             Page,
-            Modules
+            Modules,
+            Dependencies,
+            UI,
+            XHR
           ){
 
     var __guid = 0,
@@ -50,7 +56,9 @@
           },
           _defaultTarget,
           _this = this,
-          _selectedEvents = [];
+          _selectedEvents = [],
+          _defaultPopcornScripts = {},
+          _defaultPopcornCallbacks = {};
 
       if ( butterOptions.debug !== undefined ) {
         Logger.debug( butterOptions.debug );
@@ -78,7 +86,7 @@
       this.getHTML = function(){
         var media = [];
         for( var i=0; i<_media.length; ++i ){
-          media.push( _media[ i ].popcornString );
+          media.push( _media[ i ].generatePopcornString() );
         } //for
         return _page.getHTML( media );
       }; //getHTML
@@ -299,6 +307,9 @@
           media = new Media( media );
         } //if
 
+        media.popcornCallbacks = _defaultPopcornCallbacks;
+        media.popcornScripts = _defaultPopcornScripts;
+
         var mediaName = media.name;
         _media.push( media );
 
@@ -485,22 +496,28 @@
             targets = scrapedObject.target,
             medias = scrapedObject.media;
 
-        _page.preparePopcorn(function() {
-          var i, j, il, jl, url;
+        _page.prepare(function() {
+          var i, j, il, jl, url, oldTarget, oldMedia, mediaPopcornOptions;
           for( i = 0, il = targets.length; i < il; ++i ) {
+            oldTarget = null;
             if( _targets.length > 0 ){
               for( j = 0, jl = _targets.length; j < jl; ++j ){
                 // don't add the same target twice
-                if( _targets[ j ].id !== targets[ i ].id ){
-                  _this.addTarget({ element: targets[ i ].id });
+                if( _targets[ j ].id === targets[ i ].id ){
+                  oldTarget = _targets[ j ];
+                  break;
                 } //if
               } //for j
             }
-            else{
+
+            if( !oldTarget ){
               _this.addTarget({ element: targets[ i ].id });
-            } //if
-          } //for i
+            }
+          }
+
           for( i = 0, il = medias.length; i < il; i++ ) {
+            oldMedia = null;
+            mediaPopcornOptions = null;
             url = "";
             if( ["VIDEO", "AUDIO" ].indexOf( medias[ i ].nodeName ) > -1 ) {
               url = medias[ i ].currentSrc;
@@ -510,17 +527,20 @@
             if( _media.length > 0 ){
               for( j = 0, jl = _media.length; j < jl; ++j ){
                 if( _media[ j ].id !== medias[ i ].id && _media[ j ].url !== url ){
-                  _this.addMedia({ target: medias[ i ].id, url: url });
+                  oldMedia = _media[ j ];
+                  break;
                 } //if
               } //for
             }
             else{
-              var mediaPopcornOptions;
               if( _config.mediaDefaults ){
                 mediaPopcornOptions = _config.mediaDefaults;
               }
-              _this.addMedia({ target: medias[ i ].id, url: url, popcornOptions: mediaPopcornOptions });
             } //if
+
+            if( !oldMedia ){
+              _this.addMedia({ target: medias[ i ].id, url: url, popcornOptions: mediaPopcornOptions });
+            }
           } //for
 
           if( callback ){
@@ -537,6 +557,73 @@
           butterOptions.ready( e.data );
         });
       } //if
+
+      var preparePopcornScriptsAndCallbacks = this.preparePopcornScriptsAndCallbacks = function( readyCallback ){
+        var popcornConfig = _config.popcorn || {},
+            callbacks = popcornConfig.callbacks,
+            scripts = popcornConfig.scripts,
+            toLoad = [],
+            loaded = 0;
+
+        // wrap the load function to remember the script
+        function genLoadFunction( script ){
+          return function( e ){
+            // this = XMLHttpRequest object
+            if( this.readyState === 4 ){
+
+              // if the server sent back a bad response, record empty string and log error
+              if( this.status !== 200 ){
+                _defaultPopcornScripts[ script ] = "";
+                _logger.log( "WARNING: Trouble loading Popcorn script: " + this.response );
+              }
+              else{
+                // otherwise, store the response as text
+                _defaultPopcornScripts[ script ] = this.response;
+              }
+
+              // see if we can call the readyCallback yet
+              ++loaded;
+              if( loaded === toLoad.length && readyCallback ){
+                readyCallback();
+              }
+
+            }
+          };
+        }
+
+        _defaultPopcornCallbacks = callbacks;
+
+        for( var script in scripts ){
+          if( scripts.hasOwnProperty( script ) ){
+            var url = scripts[ script ],
+                probableElement = document.getElementById( url.substring( 1 ) );
+            // check to see if an element on the page contains the script we want
+            if( url.indexOf( "#" ) === 0 ){
+              if( probableElement ){
+                _defaultPopcornScripts[ script ] = probableElement.innerHTML;
+              }
+            }
+            else{
+              // if not, treat it as a url and try to load it
+              toLoad.push({
+                url: url,
+                onLoad: genLoadFunction( script )
+              });
+            }
+          }
+        }
+
+        // if there are scripts to load, load them
+        if( toLoad.length > 0 ){
+          for( var i = 0; i < toLoad.length; ++i ){
+            XHR.get( toLoad[ i ].url, toLoad[ i ].onLoad );
+          }
+        }
+        else{
+          // otherwise, call the ready callback right away
+          readyCallback();
+        }
+      };
 
       function readConfig(){
         var icons = _config.icons,
@@ -559,15 +646,27 @@
         } //for
 
         //prepare modules first
-        var moduleCollection = Modules( _this, _config );
+        var moduleCollection = Modules( _this, _config ),
+            loader = Dependencies( _config );
 
-        _page = new Page( _config );
+        _this.loader = loader;
 
-        //prepare the page next
-        preparePage(function(){
-          moduleCollection.ready(function(){
-            //fire the ready event
-            _em.dispatch( "ready", _this );
+        _page = new Page( loader, _config );
+
+        _this.ui = new UI( _this, _config.ui );
+
+        _this.ui.load(function(){
+          //prepare the page next
+          preparePopcornScriptsAndCallbacks(function(){
+            preparePage(function(){
+              moduleCollection.ready(function(){
+                if( _config.snapshotHTMLOnReady ){
+                  _page.snapshotHTML();
+                }
+                //fire the ready event
+                _em.dispatch( "ready", _this );
+              });
+            });
           });
         });
       
@@ -599,6 +698,8 @@
         _config = butterOptions.config;
         readConfig();
       } //if
+
+      this.page = _page;
 
     }
 

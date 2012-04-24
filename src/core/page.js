@@ -4,14 +4,15 @@
 
 define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager ) {
 
-  return function( config ) {
+  return function( loader, config ) {
 
     var POPCORN_BASE_URL = config.dirs[ "popcorn-js" ],
-        POPCORN_URL = POPCORN_BASE_URL + "popcorn.js",
-        PLAYER_URL = POPCORN_BASE_URL + "modules/player/popcorn.player.js",
-        PLAYER_TYPE_URL = POPCORN_BASE_URL + "players/{type}/popcorn.{type}.js";
+        POPCORN_URL = "{popcorn-js}/popcorn.js",
+        PLAYER_URL = "{popcorn-js}/modules/player/popcorn.player.js",
+        PLAYER_TYPE_URL = "{popcorn-js}/players/{type}/popcorn.{type}.js";
 
-    var _eventManager = new EventManager( this );
+    var _eventManager = new EventManager( this ),
+        _snapshot;
 
     this.scrape = function() {
       var rootNode = document.body,
@@ -24,66 +25,50 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
       }; 
     }; // scrape
 
-    this.preparePopcorn = function( readyCallback ) {
-
-      function addScript( url ) {
-        var script = document.createElement( "script" );
-        script.src = url;
-        document.head.appendChild( script );
-      }
-
-      function isPopcornReady( cb ) {
-        if ( !window.Popcorn ) {
-          setTimeout( function() {
-            isPopcornReady( cb );
-          }, 100 );
+    this.prepare = function( readyCallback ){
+      loader.load([
+        {
+          type: "js",
+          url: "{popcorn-js}/popcorn.js",
+          check: function(){
+            return !!window.Popcorn;
+          }
+        },
+        {
+          type: "js",
+          url: "{popcorn-js}/modules/player/popcorn.player.js",
+          check: function(){
+            return !!window.Popcorn.player;
+          }
         }
-        else {
-          cb();
-        } //if
-      } //isPopcornReady
+      ], readyCallback, true );
+    };
 
-      function isPlayerReady() {
-        if ( !window.Popcorn.player ) {
-          setTimeout( function() {
-            isPlayerReady();
-          }, 100 );
+    this.addPlayerType = function( type, callback ){
+      loader.load({
+        type: "js",
+        url: PLAYER_TYPE_URL.replace( /\{type\}/g, type ),
+        check: function(){
+          return !!Popcorn[ type ];
         }
-        else {
-          readyCallback();
-        }
-      }
-
-      function checkPlayer() {
-        if( !window.Popcorn.player ) {
-          addScript( PLAYER_URL );
-          isPlayerReady();
-        } else {
-          readyCallback();
-        }
-      }
-
-      if ( !window.Popcorn ) {
-        addScript( POPCORN_URL );
-        isPopcornReady( checkPlayer );
-      } else {
-        checkPlayer();
-      }
-    }; // preparePopcorn
-
-    this.addPlayerType = function( type ){
-      if( !Popcorn[ type ] ){
-        var script = document.createElement( "script" );
-        script.src = PLAYER_TYPE_URL.replace( /\{type\}/g, type );
-        document.head.appendChild( script );
-      }
+      }, callback );
     };
 
     this.getHTML = function( popcornStrings ){
-      var html = document.createElement( "html" ),
-          head = document.getElementsByTagName( "head" )[ 0 ].cloneNode( true ),
-          body = document.getElementsByTagName( "body" )[ 0 ].cloneNode( true ),
-          i, toClean, toExclude, node;
+      var html, head, body, i, toClean, toExclude, node, base;
+
+      //html tag to which body and head are appended below
+      html = document.createElement( "html" );
+
+      // if there is already a snapshot, clone it instead of cloning the current dom
+      if( !_snapshot ){
+        head = document.getElementsByTagName( "head" )[ 0 ].cloneNode( true );
+        body = document.getElementsByTagName( "body" )[ 0 ].cloneNode( true );
+      }
+      else{
+        head = _snapshot.head.cloneNode( true );
+        body = _snapshot.body.cloneNode( true );
+      }
 
       toExclude = Array.prototype.slice.call( head.querySelectorAll( "*[data-butter-exclude]" ) );
       toExclude = toExclude.concat( Array.prototype.slice.call( head.querySelectorAll( "*[data-requiremodule]" ) ) );
@@ -97,6 +82,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         node = toClean[ i ];
         node.removeAttribute( "butter-clean" );
         node.removeAttribute( "data-butter" );
+        node.removeAttribute( "data-butter-default" );
 
         // obviously, classList is preferred (https://developer.mozilla.org/en/DOM/element.classList)
         if( node.classList ){
@@ -113,6 +99,11 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         node.parentNode.removeChild( node );
       } //for
 
+      // Add <base> tag, but only for export
+      base = document.createElement("base");
+      base.href = window.location.href.substring( 0, window.location.href.lastIndexOf( "/" ) + 1 );
+      head.insertBefore( base, base.firstChild );
+
       html.appendChild( head );
       html.appendChild( body );
 
@@ -127,6 +118,23 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
 
       return "<html>" + html.innerHTML + "</html>";
     }; //getHTML
+
+    /* Take a snapshot of the current DOM and store it.
+     * Mainly for use with generatePopcornString() so as to not export unwanted DOM objects,
+     * a snapshot can be taken at any time (usually up to the template author).
+     */
+    this.snapshotHTML = function(){
+      _snapshot = {
+        head: document.getElementsByTagName( "head" )[ 0 ].cloneNode( true ),
+        body: document.getElementsByTagName( "body" )[ 0 ].cloneNode( true )
+      };
+    };
+
+    /* Forget DOM snapshots previously taken
+     */
+    this.eraseSnapshot = function(){
+      _snapshot = null;
+    };
 
   }; // page
 });

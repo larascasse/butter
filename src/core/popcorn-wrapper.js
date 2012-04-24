@@ -37,16 +37,11 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         _playerReady = false,
         _this = this;
 
-    function encodeString( string ) {
-      return String( string ).replace(/['\\"]/g, "\\$&");
-    }
-
     /* Destroy popcorn bindings specfically without touching other discovered
      * settings
      */
     this.unbind = function(){
       try{
-        removePopcornHandlers();
         _popcorn.destroy();
         _popcorn = undefined;
       }
@@ -63,15 +58,6 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         _popcorn.on( eventName, _popcornEvents[ eventName ] );
       } //for
     } //addPopcornHandlers
-
-    /* Remove any handlers that were defined in the options passed into
-     * popcorn wrapper. Events such as timeupdate, paused, etc
-     */
-    function removePopcornHandlers(){
-      for( var eventName in _popcornEvents ){
-        _popcorn.off( eventName, _popcornEvents[ eventName ] );
-      } //for
-    } //removePopcornHandlers
 
     // Cancel loading or preparing of media whilst attempting to setup
     this.interruptLoad = function(){
@@ -135,7 +121,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
      * before we actually create the Popcorn instance and notify the
      * user.
      */
-    this.prepare = function( url, target, popcornOptions ){
+    this.prepare = function( url, target, popcornOptions, callbacks, scripts ){
 
       // called when timeout occurs preparing popcorn or the media
       function timeoutWrapper( e ){
@@ -167,7 +153,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
             // construct the correct dom infrastructure if required
             constructPlayer( target );
             // generate a function which will create a popcorn instance when entered into the page
-            createPopcorn( generatePopcornString( popcornOptions, url, target ) );
+            createPopcorn( generatePopcornString( popcornOptions, url, target, null, callbacks, scripts ) );
             // once popcorn is created, attach listeners to it to detect state
             addPopcornHandlers();
             // wait for the media to become available and notify the user, or timeout
@@ -225,8 +211,19 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
      * and create a stringified representation of the Popcorn constructor (usually to
      * insert in a script tag).
      */
-    var generatePopcornString = this.generatePopcornString = function( popcornOptions, url, target, method ){
-      var popcornString = "";
+    var generatePopcornString = this.generatePopcornString = function( popcornOptions, url, target, method, callbacks, scripts ){
+
+      callbacks = callbacks || {};
+      scripts = scripts || {};
+
+      var popcornString = "",
+          trackEvents,
+          trackEvent,
+          optionString,
+          saveOptions,
+          i,
+          l,
+          option;
 
       // prepare popcornOptions as a string
       if ( popcornOptions ) {
@@ -250,6 +247,13 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         throw new Error( "Media type not generated yet. Please specify a url for media objects before generating a popcorn string." );
       }
 
+      if( scripts.init ){
+        popcornString += scripts.init + "\n";
+      }
+      if( callbacks.init ){
+        popcornString += callbacks.init + "();\n";
+      }
+
       // special case for basePlayer, since it doesn't require as much of a harness
       if( _mediaType === "baseplayer" ) {
         popcornString +=  "Popcorn.player( 'baseplayer' );\n" +
@@ -260,27 +264,54 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         popcornString += "var popcorn = Popcorn.smart( '#" + target + "', '" + url + "'" + popcornOptions + " );\n";
       }
 
+      if( scripts.beforeEvents ){
+        popcornString += scripts.beforeEvents + "\n";
+      }
+      if( callbacks.beforeEvents ){
+        popcornString += callbacks.beforeEvents + "( popcorn );\n";
+      }
+
       // if popcorn was built successful
       if ( _popcorn ) {
 
         // gather and serialize existing trackevents
-        var trackEvents = _popcorn.getTrackEvents();
+        trackEvents = _popcorn.getTrackEvents();
         if ( trackEvents ) {
-          for ( var i=0, l=trackEvents.length; i<l; ++i ) {
-            popcornOptions = trackEvents[ i ]._natives.manifest.options;
-            popcornString += "popcorn." + trackEvents[ i ]._natives.type + "({";
-            for ( var option in popcornOptions ) {
+          for ( i=0, l=trackEvents.length; i<l; ++i ) {
+            trackEvent = trackEvents[ i ];
+            popcornOptions = trackEvent._natives.manifest.options;
+            saveOptions = {};
+            for ( option in popcornOptions ) {
               if ( popcornOptions.hasOwnProperty( option ) ) {
-                popcornString += "\n" + option + ":'" + encodeString( trackEvents[ i ][ option ] ) + "',";
+                if (trackEvent[ option ] !== undefined) {
+                  saveOptions[ option ] = trackEvent[ option ];
+                }
               }
             }
-            if ( popcornString[ popcornString.length - 1 ] === "," ) {
-              popcornString = popcornString.substring( 0, popcornString.length - 1 );
+
+            //stringify will throw an error on circular data structures
+            try {
+              //pretty print with 2 spaces per indent
+              optionString = JSON.stringify( saveOptions, null, 2 );
+            } catch ( jsonError ) {
+              optionString = false;
+              _logger.log( "WARNING: Unable to export event options: \n" + jsonError.message );
             }
-            popcornString += "});\n";
+            
+            if ( optionString ) {
+              popcornString += "popcorn." + trackEvents[ i ]._natives.type + "(" +
+                optionString + ");\n";
+            }
           } //for trackEvents
         } //if trackEvents
 
+      }
+
+      if( scripts.afterEvents ){
+        popcornString += scripts.afterEvents + "\n";
+      }
+      if( callbacks.afterEvents ){
+        popcornString += callbacks.afterEvents + "( popcorn );\n";
       }
 
       // if the `method` var is blank, the user probably just wanted an inline function without an onLoad wrapper
@@ -395,14 +426,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         return;
       } //if
       if( _popcorn ){
-        try{
-          removePopcornHandlers();
-          _popcorn.destroy();
-          _popcorn = undefined;
-        }
-        catch( e ){
-          _logger.log( "WARNING: Popcorn did NOT get destroyed properly: \n" + e.message + "\n" + e.stack );
-        } //try
+        _this.unbind(); 
       } //if
       while( container.firstChild ) {
         container.removeChild( container.firstChild );

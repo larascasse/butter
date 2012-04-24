@@ -8,8 +8,7 @@ define(
     "editor/module",
     "timeline/module",
     "cornfield/module",
-    "plugin/module",
-    "ui/module"
+    "plugin/module"
   ], 
   function(){
 
@@ -18,6 +17,7 @@ define(
   return function( butter, config, onReady ){
 
     var modules = [],
+        loadedModules = 0,
         readyModules = 0;
 
     for( var i=0; i<moduleList.length; ++i ){
@@ -27,6 +27,27 @@ define(
     } //for
 
     return {
+      load: function( onLoaded ){
+        function onModuleLoaded(){
+          loadedModules++;
+          if( loadedModules === modules.length ){
+            onLoaded();
+          }
+        }
+
+        for( var i=0; i<modules.length; ++i ){
+          if( modules[ i ]._load ){
+            modules[ i ]._load( onModuleLoaded );
+          }
+          else{
+            loadedModules++;
+          } //if
+        } //for
+
+        if( loadedModules === modules.length ){
+          onLoaded();
+        }
+      },
       ready: function( onReady ){
         function onModuleReady(){
           readyModules++;
@@ -43,10 +64,6 @@ define(
             readyModules++;
           } //if
         } //for
-
-        if( readyModules === modules.length ){
-          onReady();
-        }
       }
     };
 
