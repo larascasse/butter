@@ -5,15 +5,13 @@
 (function() {
 
   define( [ "core/logger",
-            "core/eventmanager",
             "util/dragndrop",
             "util/scrollbars",
             "./plugin-list",
             "./plugin"
-          ], 
+          ],
           function(
             Logger,
-            EventManager,
             DragNDrop,
             Scrollbars,
             PluginList,
@@ -70,20 +68,23 @@
 
       var _plugins = [],
           _container = document.createElement( "div" ),
+          _listWrapper = document.createElement( "div" ),
           _listContainer = document.createElement( "div" ),
           _this = this,
           _pattern = '<div class="list-item $type_tool">$type</div>';
 
       _container.id = "butter-plugin";
       _listContainer.className = "list";
+      _listWrapper.className = "list-wrapper";
 
       var title = document.createElement( "div" );
       title.className = "title";
       title.innerHTML = "<span>My Events</span>";
       _container.appendChild( title );
-      _container.appendChild( _listContainer );
+      _listWrapper.appendChild( _listContainer );
+      _container.appendChild( _listWrapper );
 
-      var _scrollbar = new Scrollbars.Vertical( _container, _listContainer );
+      var _scrollbar = new Scrollbars.Vertical( _listWrapper, _listContainer );
       _container.appendChild( _scrollbar.element );
 
       this._start = function( onModuleReady ){
@@ -111,7 +112,7 @@
                   cb();
                 }
               };
-        
+
           for( i = 0, l = plugin.length; i < l; i++ ) {
             _this.add( plugin[ i ], check );
           }
@@ -121,7 +122,7 @@
           }
 
           plugin = new Plugin( _plugins.length, plugin );
-          
+
           var interval = setInterval(function( e ) {
             if( !Popcorn.manifest[ plugin.type ]) {
               return;
@@ -134,7 +135,9 @@
           }, 100);
 
           _plugins.push( plugin );
-          _listContainer.appendChild( plugin.createElement( _pattern ) );
+          if( moduleOptions.defaults && moduleOptions.defaults.indexOf( plugin.type ) > -1 ){
+            _listContainer.appendChild( plugin.createElement( butter, _pattern ) );
+          }
           butter.dispatch( "pluginadded", plugin );
         }
 
@@ -185,7 +188,7 @@
       };
 
       this.clear = function () {
-        while ( plugins.length > 0 ) {
+        while ( _plugins.length > 0 ) {
           var plugin = _plugins.pop();
           _listContainer.removeChild( plugin.element );
           butter.dispatch( "pluginremoved", plugin );
@@ -199,6 +202,23 @@
           } //if
         } //for
       }; //get
+
+      DragNDrop.droppable( _container, {
+        drop: function( element ){
+          if( element.getAttribute( "data-butter-draggable-type" ) === "plugin" ){
+            var pluginType = element.getAttribute( "data-butter-plugin-type" ),
+                plugin = _this.get( pluginType );
+            if( plugin ){
+              for( var i=0; i<_listContainer.childNodes.length; ++i ){
+                if( _listContainer.childNodes[ i ].getAttribute( "data-butter-plugin-type" ) === pluginType ){
+                  return;
+                }
+              }
+              _listContainer.appendChild( plugin.createElement( butter, _pattern ) );
+            }
+          }
+        }
+      });
     }; //PluginManager
 
     PluginManager.__moduleName = "plugin";
@@ -206,4 +226,4 @@
     return PluginManager;
 
   }); //define
-})();
+}());

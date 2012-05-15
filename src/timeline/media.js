@@ -14,9 +14,9 @@ define( [
           "./trackhandles"
         ],
         function(
-          TrackEvent, 
-          Track, 
-          EventManager,
+          TrackEvent,
+          Track,
+          EventManagerWrapper,
           TrackContainer,
           Scrollbars,
           TimeBar,
@@ -28,17 +28,28 @@ define( [
       ZOOM_FACTOR = 100;
 
   function MediaInstance( butter, media ){
+    function onTrackOrderChanged( orderedTracks ){
+      _tracksContainer.orderTracks( orderedTracks );
+    } //onTrackOrderChanged
+
+    function zoomCallback( zoomLevel ){
+      var nextZoom = ( 1 + zoomLevel ) * ZOOM_FACTOR;
+      if( nextZoom !== _zoom ){
+        _zoom = nextZoom;
+        _tracksContainer.zoom = _zoom;
+        updateUI();
+      } //if
+    } //zoomCallback
+
     var _this = this,
         _media = media,
-        _em = new EventManager( this ),
-        _tracksContainer = new TrackContainer( media ),
+        _tracksContainer = new TrackContainer( butter, media ),
         _rootElement = document.createElement( "div" ),
         _container = document.createElement( "div" ),
         _mediaStatusContainer = document.createElement( "div" ),
         _trackliner,
         _tracks = {},
         _selectedTracks = [],
-        _initialized = false,
         _hScrollBar = new Scrollbars.Horizontal( _tracksContainer ),
         _vScrollBar = new Scrollbars.Vertical( _tracksContainer ),
         _shrunken = false,
@@ -50,24 +61,13 @@ define( [
         _currentMouseDownTrackEvent,
         _zoom = INITIAL_ZOOM;
 
+    EventManagerWrapper( _this );
+
     _rootElement.className = "media-instance";
     _rootElement.id = "media-instance" + media.id;
     _container.className = "media-container";
 
-    function onTrackOrderChanged( orderedTracks ){
-      _tracksContainer.orderTracks( orderedTracks );
-    } //onTrackOrderChanged
-
     _mediaStatusContainer.className = "media-status-container";
-
-    function zoomCallback( zoomLevel ){
-      var nextZoom = ( 1 + zoomLevel ) * ZOOM_FACTOR;
-      if( nextZoom !== _zoom ){
-        _zoom = nextZoom;
-        _tracksContainer.zoom = _zoom;
-        updateUI();
-      } //if
-    } //zoomCallback
 
     _media.listen( "trackeventselected", function( e ){
       _selectedTracks.push( e.target );
@@ -140,12 +140,16 @@ define( [
       } //if
     } //onTrackEventSelected
 
-    _media.listen( "mediaready", function(){
+    function onMediaReady(){
       _zoombar.update( 0 );
-
       _tracksContainer.zoom = _zoom;
+      updateUI();
+      _this.dispatch( "ready" );
+    }
 
-      var tracks = _media.tracks;
+    function onMediaReadyFirst(){
+      _media.unlisten( "mediaready", onMediaReadyFirst );
+      _media.listen( "mediaready", onMediaReady );
 
       _container.appendChild( _tracksContainer.element );
       _container.appendChild( _hScrollBar.element );
@@ -191,7 +195,7 @@ define( [
           track.view.listen( "trackeventmouseout", onTrackEventMouseOut );
         } //if
       }
-      
+
       var existingTracks = _media.tracks;
       for( var i=0; i<existingTracks.length; ++i ){
         onTrackAdded({
@@ -213,11 +217,10 @@ define( [
         } //if
       });
 
-      updateUI();
-      _initialized = true;
-      _em.dispatch( "ready" );
+      onMediaReady();
+    }
 
-    }); //mediaready
+    _media.listen( "mediaready", onMediaReadyFirst );
 
     function onPluginDropped( e ){
 
@@ -324,13 +327,6 @@ define( [
           return _media;
         }
       },
-      initialized: {
-        enumerable: true,
-        configurable: false,
-        get: function(){
-          return _initialized;
-        }
-      },
       shrunken: {
         enumerable: true,
         configurable: false,
@@ -340,7 +336,7 @@ define( [
         set: function( val ){
           if( val !== _shrunken ){
             _shrunken = val;
-            
+
           } //if
         }
       }

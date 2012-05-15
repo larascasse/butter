@@ -36,6 +36,7 @@ define( [], function(){
     _container.className = "time-bar-scrubber-container";
     _node.className = "time-bar-scrubber-node";
     _line.className = "time-bar-scrubber-line";
+    _node.title = _line.title = "Displays the media's current time. Drag to seek through the media.";
     _fill.className = "fill-bar";
 
     _node.appendChild( _line );
@@ -55,7 +56,8 @@ define( [], function(){
     function setNodePosition(){
       var duration = _media.duration,
           currentTime = _media.currentTime,
-          scrollLeft = _tracksContainer.element.scrollLeft;
+          tracksElement = _tracksContainer.element,
+          scrollLeft = tracksElement.scrollLeft;
 
       // if we can avoid re-setting position and visibility, then do so
       if( _lastTime !== currentTime || _lastScroll !== scrollLeft || _lastZoom !== _zoom ){
@@ -63,7 +65,10 @@ define( [], function(){
         var pos = currentTime / duration * _tracksContainerWidth,
             adjustedPos = pos - scrollLeft;
 
-        if( pos <  scrollLeft || Math.floor( pos ) - _lineWidth > _width + scrollLeft ){
+        // If the node position is outside of the viewing window, hide it.
+        // Otherwise, show it and adjust its position.
+        // Note the use of clientWidth here to account for padding/margin width fuzziness.
+        if( pos < scrollLeft || pos - _lineWidth > _container.clientWidth + scrollLeft ){
           _node.style.display = "none";
         }
         else {
@@ -207,7 +212,7 @@ define( [], function(){
       }
     });
 
-    _checkMediaInterval = setInterval( checkMedia, CHECK_MEDIA_INTERVAL );
+    var _checkMediaInterval = setInterval( checkMedia, CHECK_MEDIA_INTERVAL );
 
     this.destroy = function(){
       clearInterval( _checkMediaInterval );

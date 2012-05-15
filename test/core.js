@@ -576,6 +576,21 @@
     });
   });
 
+  test( "Test strange div/video player support", function(){
+    expect( 4 );
+    var el = document.createElement( "video" );
+    el.setAttribute( "data-butter-source", "http://www.youtube.com/watch?v=7glrZ4e4wYU" );
+    el.setAttribute( "data-butter", "media" );
+    el.id = "strange-test-1";
+    document.body.appendChild( el );
+    createButter(function( butter ){
+      ok( butter.media.length > 0 && butter.media[0].url === "http://www.youtube.com/watch?v=7glrZ4e4wYU", "URL match" );
+      ok( document.getElementById( "strange-test-1" ), "New element exists" );
+      equals( document.getElementById( "strange-test-1" ).attributes.length, el.attributes.length, "has same attribute list length" );
+      equals( document.getElementById( "strange-test-1" ).getAttribute( "data-butter" ), "media", "has data-butter attribute" );
+    });
+  });
+
   test( "Popcorn Options", function(){
     expect( 2 );
     createButter(function( butter ) {
@@ -640,6 +655,25 @@
       });
     });
   });
+
+  asyncTest( "Modifying exported HTML from Page's getHTML event" , function() {
+    expect( 1 );
+    createButter(function( butter ) {
+      var m1 = butter.addMedia( { url:"../external/popcorn-js/test/trailer.ogv", target:"mediaDiv" } ),
+          testText = "test text at end of body";
+
+      butter.page.listen( "getHTML", function( e ) {
+        var testTextNode = document.createTextNode( testText );
+        e.data.getElementsByTagName( "body" )[ 0 ].appendChild( testTextNode );
+      });
+
+      butter.listen( "mediaready", function( e ) {
+        equals( /test text at end of body\s*<\/body>/.test( butter.getHTML() ), true, "Text appended to body in getHTML event is included in exported HTML." );
+        start();
+      });
+    })
+  });
+
   module( "Debug functionality" );
   asyncTest( "Debug enables/disables logging", 4, function() {
     createButter(function( butter ) {

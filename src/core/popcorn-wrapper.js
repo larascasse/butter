@@ -1,6 +1,7 @@
 /* This Source Code Form is subject to the terms of the MIT license
  * If a copy of the MIT license was not distributed with this file, you can
  * obtain one at http://www.mozillapopcorn.org/butter-license.txt */
+/*jshint evil:true*/
 
 define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager ) {
 
@@ -23,6 +24,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         _logger = new Logger( _id + "::PopcornWrapper" ),
         _popcornEvents = options.popcornEvents || {},
         _onPrepare = options.prepare || function(){},
+        _onConstructing = options.constructing || function(){},
         _onFail = options.fail || function(){},
         _onPlayerTypeRequired = options.playerTypeRequired || function(){},
         _onTimeout = options.timeout || function(){},
@@ -55,7 +57,9 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
      */
     function addPopcornHandlers(){
       for( var eventName in _popcornEvents ){
-        _popcorn.on( eventName, _popcornEvents[ eventName ] );
+        if( _popcornEvents.hasOwnProperty( eventName ) ) {
+          _popcorn.on( eventName, _popcornEvents[ eventName ] );
+        }
       } //for
     } //addPopcornHandlers
 
@@ -156,6 +160,9 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
             createPopcorn( generatePopcornString( popcornOptions, url, target, null, callbacks, scripts ) );
             // once popcorn is created, attach listeners to it to detect state
             addPopcornHandlers();
+            if( _onConstructing ){
+              _onConstructing();
+            }
             // wait for the media to become available and notify the user, or timeout
             waitForMedia( _onPrepare, timeoutWrapper );
           }, timeoutWrapper );
@@ -198,11 +205,22 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
       if( _mediaType !== "object" && targetElement ) {
         if( [ "VIDEO", "AUDIO" ].indexOf( targetElement.nodeName ) !== -1 ) {
           var parentNode = targetElement.parentNode,
-              newElement = document.createElement( "div" );
+              newElement = document.createElement( "div" ),
+              attributes;
 
           newElement.id = targetElement.id;
-          newElement.style.cssText = getComputedStyle( targetElement ).cssText;
+          attributes = targetElement.attributes;
+          if( attributes ){
+            for( var i = attributes.length - 1; i >= 0; i-- ) {
+              var name = attributes[ i ].nodeName;
+              newElement.setAttribute( name, targetElement.getAttribute( name ) );
+            }
+          }
+          if( targetElement.className ){
+            newElement.className = targetElement.className;
+          }
           parentNode.replaceChild( newElement, targetElement );
+          newElement.setAttribute( "data-butter", "media" );
         }
       }
     }
@@ -297,7 +315,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
               optionString = false;
               _logger.log( "WARNING: Unable to export event options: \n" + jsonError.message );
             }
-            
+
             if ( optionString ) {
               popcornString += "popcorn." + trackEvents[ i ]._natives.type + "(" +
                 optionString + ");\n";
@@ -333,7 +351,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
      * and insert it as a script in the head if that fails.
      */
     function createPopcorn( popcornString ){
-      var popcornFunction = new Function( "", popcornString );
+      var popcornFunction = new Function( "", popcornString ),
           popcorn = popcornFunction();
       if ( !popcorn ) {
         var popcornScript = document.createElement( "script" );
@@ -387,7 +405,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
      */
     function waitForMedia( readyCallback, timeoutCallback ){
       checkTimeoutLoop(function(){
-        return ( _popcorn.media.readyState >= 2 && _popcorn.duration() > 0 );
+        return ( _popcorn.media.readyState >= 1 && _popcorn.duration() > 0 );
       }, readyCallback, timeoutCallback, MEDIA_WAIT_DURATION );
     }
 
@@ -426,7 +444,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
         return;
       } //if
       if( _popcorn ){
-        _this.unbind(); 
+        _this.unbind();
       } //if
       while( container.firstChild ) {
         container.removeChild( container.firstChild );
@@ -507,7 +525,7 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
             return _popcorn.paused();
           } //if
           return true;
-        }, 
+        },
         set: function( val ){
           if( _popcorn ){
             if( val ){

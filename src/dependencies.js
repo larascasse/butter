@@ -48,8 +48,8 @@ define([], function(){
           document.head.appendChild( scriptElement );
           scriptElement.onload = scriptElement.onreadystatechange = callback;
         }
-        else{
-          callback();  
+        else if( callback ){
+          callback();
         }
       },
       css: function( url, exclude, callback, checkFn ){
@@ -77,7 +77,9 @@ define([], function(){
         var interval = setInterval(function(){
           if( checkFn() ){
             clearInterval( interval );
-            callback();
+            if( callback ){
+              callback();
+            }
           }
         }, CSS_POLL_INTERVAL );
 
@@ -133,7 +135,7 @@ define([], function(){
               _loaders[ item.type ]( item.url, item.exclude, callback, item.check );
             }
             else{
-              throw new Error( "Attempted to load resource without url." ); 
+              throw new Error( "Attempted to load resource without url." );
             }
           }
           else {

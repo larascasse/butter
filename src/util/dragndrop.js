@@ -171,7 +171,7 @@ define([], function(){
             mouseDownPosition -= DEFAULT_SCROLL_AMOUNT;
           }
         }
-        
+
         if( newW + originalPosition > element.offsetParent.offsetWidth ){
           newW = element.offsetParent.offsetWidth - originalPosition;
         }
@@ -263,6 +263,7 @@ define([], function(){
     element.addEventListener( "drop", function( e ){
       e.preventDefault();
       e.stopPropagation();
+
       if( _hoverClass ){
         element.classList.remove( _hoverClass );
       }
@@ -271,17 +272,17 @@ define([], function(){
       if( helper ){
         _onDrop( helper, [ e.clientX, e.clientY ] );
       }
-      return false;
     }, false );
 
     element.addEventListener( "dragover", function( e ){
       e.preventDefault();
+      e.stopPropagation();
+
       e.dataTransfer.dropEffect = "copy";
     }, false );
 
     element.addEventListener( "dragenter", function( e ){
-      element.classList.add( _hoverClass );
-      if( _hoverClass ){
+      if( _hoverClass ) {
         element.classList.add( _hoverClass );
       }
       var transferData = e.dataTransfer.getData( "text" ),
@@ -292,7 +293,9 @@ define([], function(){
     }, false );
 
     element.addEventListener( "dragleave", function( e ){
-      element.classList.remove( _hoverClass );
+      if ( _hoverClass ) {
+        element.classList.remove( _hoverClass );
+      }
       var transferData = e.dataTransfer.getData( "text" ),
           helper = __helpers[ transferData ] || __currentDraggingElement;
       if( helper ){
@@ -518,12 +521,14 @@ define([], function(){
     var _onChange = options.change || function(){},
         _elements = [],
         _instance = {},
-        _mouseDownPosition,
+        _mouseDownPosition = 0,
         _draggingElement,
         _draggingOriginalPosition,
         _moved,
         _hoverElement,
-        _placeHolder;
+        _placeHolder,
+        _oldZIndex;
+
 
     function createPlaceholder( victim ){
       var placeholder = victim.cloneNode( false );
@@ -600,10 +605,12 @@ define([], function(){
       _moved = false;
       _draggingElement = e.target;
       _draggingOriginalPosition = _draggingElement.offsetTop;
+
       var style = getComputedStyle( _draggingElement );
+
       _oldZIndex = style.getPropertyValue( "z-index" );
-      _oldPositionStyle = style.getPropertyValue( "position" );
       _mouseDownPosition = e.clientY;
+
       window.addEventListener( "mouseup", onElementMouseUp, false );
       window.addEventListener( "mousemove", onElementMouseMove, false );
     }
@@ -620,7 +627,6 @@ define([], function(){
         parentElement.replaceChild( _draggingElement, _placeHolder );
         _placeHolder = null;
       }
-      
     }
 
     _instance.addItem = function( item ){

@@ -11,7 +11,7 @@ const express = require('express'),
       PUBLISH_PREFIX = CONFIG.dirs.publishPrefix,
       ENVIRONMENT = CONFIG.environment || {},
       MODE = ENVIRONMENT.mode || "production",
-      WWW_ROOT = CONFIG.dirs.wwwRoot || __dirname + "/..",
+      WWW_ROOT = path.resolve(CONFIG.dirs.wwwRoot || __dirname + "/.."),
       TEMPLATES = CONFIG.templates || {};
 
 var DEFAULT_USER = null,
@@ -286,8 +286,10 @@ app.post('/project/:id?', function( req, res ) {
   });
 });
 
-app.listen(CONFIG.server.bindPort, CONFIG.server.bindIP, function() {
+var port = process.env.PORT || CONFIG.server.bindPort;
+
+app.listen(port, CONFIG.server.bindIP, function() {
   var addy = app.address();
-  console.log('HTTP Server started on http://' + CONFIG.server.bindIP + ':' + CONFIG.server.bindPort);
+  console.log('HTTP Server started on http://' + CONFIG.server.bindIP + ':' + addy.port);
   console.log('Press Ctrl+C to stop');
 });

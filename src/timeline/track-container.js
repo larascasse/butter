@@ -2,9 +2,17 @@
  * If a copy of the MIT license was not distributed with this file, you can
  * obtain one at http://www.mozillapopcorn.org/butter-license.txt */
 
-define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager ){
+define(
+[
+  "core/logger",
+  "util/dragndrop"
+],
+function(
+  Logger,
+  DragNDrop
+) {
 
-  return function( media ){
+  return function( butter, media ){
 
     var _media = media,
         _zoom = 1,
@@ -21,6 +29,23 @@ define( [ "core/logger", "core/eventmanager" ], function( Logger, EventManager )
     _container.addEventListener( "mousedown", function( e ){
       _this.deselectOthers();
     }, false );
+
+    DragNDrop.droppable( _element, {
+      drop: function( dropped, mousePosition ) {
+        if ( dropped.getAttribute( "data-butter-draggable-type" ) === "plugin" ) {
+          var newTrack = butter.currentMedia.addTrack(),
+              trackRect = newTrack.view.element.getBoundingClientRect(),
+              left = mousePosition[ 0 ] - trackRect.left,
+              start = left / trackRect.width * newTrack.view.duration;
+
+          newTrack.view.dispatch( "plugindropped", {
+            start: start,
+            track: newTrack,
+            type: dropped.getAttribute( "data-butter-plugin-type" )
+          });
+        }
+      }
+    });
 
     this.orderTracks = function( orderedTracks ){
       for( var i=0, l=orderedTracks.length; i<l; ++i ){

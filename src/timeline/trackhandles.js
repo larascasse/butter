@@ -5,7 +5,7 @@
 define( [
           "dialog/iframe-dialog",
           "util/dragndrop"
-        ], 
+        ],
         function( IFrameDialog, DragNDrop ){
 
   var ADD_TRACK_BUTTON_Y_ADJUSTMENT = 35;
@@ -27,6 +27,7 @@ define( [
 
     _addTrackButton.id = "add-track";
     _addTrackButton.innerHTML = "+Track";
+    _addTrackButton.title = "Add a new Track for your events";
 
     _container.appendChild( _addTrackButton );
 
@@ -44,13 +45,6 @@ define( [
         orderChangedCallback( orderedTracks );
       }
     });
-
-    var existingTracks = _media.tracks;
-    for( var i=0; i<existingTracks.length; ++i ){
-      onTrackAdded({
-        data: existingTracks[ i ]
-      });
-    }
 
     function onTrackAdded( e ){
       var track = e.data,
@@ -114,6 +108,7 @@ define( [
                     i,
                     l;
 
+                trackDiv.childNodes[ 0 ].textContent = track.name = trackData.name;
                 // update every trackevent with it's new data
                 for ( i = 0, l = trackDataEvents.length; i < l; i++ ) {
                   var teData = trackDataEvents[ i ],
@@ -176,6 +171,13 @@ define( [
       };
 
       _addTrackButton.style.top = _listElement.offsetHeight - ADD_TRACK_BUTTON_Y_ADJUSTMENT + "px";
+    }
+
+    var existingTracks = _media.tracks;
+    for( var i=0; i<existingTracks.length; ++i ){
+      onTrackAdded({
+        data: existingTracks[ i ]
+      });
     }
 
     _media.listen( "trackadded", onTrackAdded );
